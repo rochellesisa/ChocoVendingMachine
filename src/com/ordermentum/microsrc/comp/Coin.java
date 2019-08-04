@@ -3,8 +3,8 @@ package com.ordermentum.microsrc.comp;
 import java.math.BigDecimal;
 
 public enum Coin {
-    TEN_CENTS(new BigDecimal(.10)), TWENTY_CENTS(new BigDecimal(.20)), FIFTY_CENTS(new BigDecimal(.50)),
-    ONE_DOLLAR(new BigDecimal(1)), TWO_DOLLARS(new BigDecimal(2));
+    TEN_CENTS(BigDecimal.valueOf(.10)), TWENTY_CENTS(BigDecimal.valueOf(.20)), FIFTY_CENTS(BigDecimal.valueOf(.50)),
+    ONE_DOLLAR(BigDecimal.valueOf(1)), TWO_DOLLARS(BigDecimal.valueOf(2));
 
     private BigDecimal value;
 

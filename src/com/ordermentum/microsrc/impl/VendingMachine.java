@@ -3,19 +3,20 @@ package com.ordermentum.microsrc.impl;
 import com.ordermentum.microsrc.comp.Coin;
 import com.ordermentum.microsrc.comp.Product;
 import com.ordermentum.microsrc.exception.InsufficientChangeException;
+import com.ordermentum.microsrc.exception.InsufficientPaymentException;
+import com.ordermentum.microsrc.exception.InvalidProductException;
+import com.ordermentum.microsrc.exception.InvalidStockQuantityException;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
 public abstract class VendingMachine {
 
-    List<Coin> coinsInserted;
-    HashMap<Coin, Integer> changeAvailable; //coin and quantity
-    HashMap<Product, Integer> productList; //product and quantity
+    protected List<Coin> coinsInserted;
+    protected HashMap<Coin, Integer> changeAvailable; //coin and quantity
+    protected HashMap<String, Product> productList; //product and quantity
 
     public VendingMachine(){
         coinsInserted = new ArrayList<>();
@@ -23,52 +24,138 @@ public abstract class VendingMachine {
         productList = new HashMap<>();
     }
 
-    public void restockItem(Product product, int stock){
-        if (productList.get(product) == null)
-            productList.put(product, stock);
+    public Product getProductByCode(String code){
+        return productList.get(code);
+    }
+
+    public void restockItem(String code, Product product, int stock){
+        if (stock <= 0)
+            throw new InvalidStockQuantityException(stock);
+
+        if (getProductByCode(code) == null) {
+            product.setStock(stock);
+            productList.put(code, product);
+        }
         else{
-            int currStock = productList.get(product);
-            productList.put(product, stock + currStock);
+            Product currItem = productList.get(code);
+            int newStock = currItem.getStock() + stock;
+            currItem.setStock(newStock);
+            productList.put(code, currItem);
         }
     }
 
-    public void restockItem(Coin coin, int stock){
-        changeAvailable.put(coin, stock);
+    public Integer getChangeStock(Coin coin){
+        return changeAvailable.get(coin);
+    }
+
+    public void restockCoins(Coin coin, int stock){
+        if (stock <= 0)
+            throw new InvalidStockQuantityException(stock);
+
+        if (changeAvailable.get(coin) == null)
+            changeAvailable.put(coin, stock);
+        else {
+            int newStock = changeAvailable.get(coin) + stock;
+            changeAvailable.put(coin, newStock);
+        }
     }
 
     public abstract void insertCoin(String input);
 
     public BigDecimal getTotalAmountInserted(){
-        BigDecimal total = new BigDecimal(0);
+        BigDecimal total = BigDecimal.ZERO;
         for(Coin coin : coinsInserted){
             total = total.add(coin.getValue());
         }
-        return total.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    public boolean hasCorrectAmount(Product product){
-        if (getTotalAmountInserted().compareTo(product.getCost()) >= 0)
-            return true;
-        return false;
+        return total;
     }
 
     public abstract boolean hasAvailableChange(Product product);
 
-    public void buyItem(Product product){
+    public BigDecimal getChangeValue(Product product){
+        return getTotalAmountInserted().subtract(product.getCost());
+    }
+
+    public BigDecimal getChangeValueClearCoinsInserted(Product product){
+        BigDecimal change = getChangeValue(product);
+        this.coinsInserted = new ArrayList<>();
+        return change;
+    }
+
+    public void buyItem(String code){
+        Product product = getProductByCode(code);
+
+        if (product == null)
+            throw new InvalidProductException(code);
+
         BigDecimal change = getChangeValue(product);
 
+        if (change.compareTo(BigDecimal.ZERO) < 0)
+            throw new InsufficientPaymentException(getTotalAmountInserted());
+
         if (hasAvailableChange(product)){
-            deductItem(product);
+            deductItem(code);
             deductChangeList(product);
-        } else {
-            throw new InsufficientChangeException(change, product);
         }
     }
 
     public abstract List<Coin> getChange(Product product);
 
-    public BigDecimal getChangeValue(Product product){
-        return getTotalAmountInserted().subtract(product.getCost()).setScale(2, RoundingMode.HALF_UP);
+    public void cancelTransaction(){
+        for (Coin c : coinsInserted){
+            changeAvailable.put(c, changeAvailable.get(c) - 1);
+        }
+
+        this.coinsInserted = new ArrayList<>();
+    }
+
+    public HashMap<String, Product> getAffordProducts(){
+        HashMap<String, Product> prodList = new HashMap<>();
+        for (String code : productList.keySet()) {
+            Product p = getProductByCode(code);
+            if (getTotalAmountInserted().compareTo(p.getCost()) >= 0) {
+                prodList.put(code, p);
+            }
+        }
+        return prodList;
+    }
+
+    public void deductItem(String code){
+        Product p = getProductByCode(code);
+        p.deductStock();
+        if (p.getStock() == 0)
+            productList.remove(code);
+        else
+            productList.put(code, p);
+    }
+
+    public void deductChangeList(Product product){
+        List<Coin> changeList = getChange(product);
+        for (Coin c : changeList){
+            int newStock = changeAvailable.get(c) - 1;
+            if (newStock == 0)
+                changeAvailable.remove(c);
+            else
+                changeAvailable.put(c, changeAvailable.get(c) - 1);
+        }
+    }
+
+    public boolean coinAvailableFromChange(Coin coin, BigDecimal balance){
+        if (changeAvailable.get(coin) == null)
+            return false;
+        if (balance.compareTo(coin.getValue()) < 0)
+            return false;
+        return true;
+    }
+
+
+    //getters
+    public HashMap<String, Product> getProductList() {
+        return productList;
+    }
+
+    public HashMap<Coin, Integer> getChangeAvailable() {
+        return changeAvailable;
     }
 
     public List<Coin> getCoinsInserted() {
@@ -79,58 +166,11 @@ public abstract class VendingMachine {
         this.coinsInserted = coinsInserted;
     }
 
-    public HashMap<Coin, Integer> getChangeAvailable() {
-        return changeAvailable;
-    }
-
     public void setChangeAvailable(HashMap<Coin, Integer> changeAvailable) {
         this.changeAvailable = changeAvailable;
     }
 
-    public HashMap<Product, Integer> getProductList() {
-        return productList;
-    }
-
-    public void setProductList(HashMap<Product, Integer> productList) {
+    public void setProductList(HashMap<String, Product> productList) {
         this.productList = productList;
     }
-
-    public BigDecimal getLeastPrice(){
-        BigDecimal price = null;
-        for (Product p : productList.keySet()){
-            if (price == null || price.compareTo(p.getCost()) <= 0)
-                return p.getCost().setScale(2);
-        }
-        return new BigDecimal(0);
-    }
-
-    public void cancelTransaction(){
-        this.coinsInserted = Collections.emptyList();
-
-        for (Coin c : coinsInserted){
-            changeAvailable.put(c, changeAvailable.get(c) - 1);
-        }
-    }
-
-    public List<Product> getAffordProducts(){
-        List<Product> prodList = new ArrayList<>();
-        for (Product p : productList.keySet()) {
-            if (productList.get(p) > 0 && getTotalAmountInserted().compareTo(p.getCost()) >= 0) {
-                prodList.add(p);
-            }
-        }
-        return prodList;
-    }
-
-    public void deductItem(Product product){
-        int stock = productList.get(product);
-        productList.put(product, stock - 1);
-    }
-
-    public void deductChangeList(Product product){
-        for (Coin c : getChange(product)){
-            changeAvailable.put(c, changeAvailable.get(c) - 1);
-        }
-    }
-
 }

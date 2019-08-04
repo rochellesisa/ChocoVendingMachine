@@ -6,15 +6,20 @@ import java.math.RoundingMode;
 public class Product {
 
     private String name;
-    private String key;
+    private int stock;
     private BigDecimal cost;
 
     public Product() {
     }
 
-    public Product(String name, String key, BigDecimal cost) {
+    public Product(String name, BigDecimal cost, int stock) {
         this.name = name;
-        this.key = key;
+        this.cost = cost;
+        this.stock = stock;
+    }
+
+    public Product(String name, BigDecimal cost) {
+        this.name = name;
         this.cost = cost;
     }
 
@@ -26,20 +31,42 @@ public class Product {
         this.name = name;
     }
 
-    public String getKey() {
-        return key;
+    public int getStock() {
+        return stock;
     }
 
-    public void setKey(String key) {
-        this.key = key;
+    public void deductStock(){
+        stock -= 1;
+    }
+
+    public void setStock(int stock) {
+        this.stock = stock;
     }
 
     public BigDecimal getCost() {
-        return cost.setScale(2, RoundingMode.HALF_UP);
+        return cost;
     }
 
     public void setCost(BigDecimal cost) {
         this.cost = cost;
     }
 
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        Product prod = (Product) obj;
+        return name == prod.name &&
+                stock == prod.stock &&
+                cost.equals(prod.cost);
+    }
+
+    @Override
+    public int hashCode() {
+        return name.hashCode() + stock + cost.hashCode();
+    }
 }
